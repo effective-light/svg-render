@@ -1,6 +1,6 @@
-/* 
+/*
  * @copyright Adam Benda, 2016
- * 
+ *
  */
 
 
@@ -26,7 +26,7 @@ var SVGRender = function () {
  * @param {SVGSVGElement |  Blob | File | String} svg - svg element or its source
  * @param {function} callback with parameters (err, SVGRender)
  * @returns {undefined}
- * 
+ *
  * @public
  **/
 SVGRender.prototype.load = function (svg, callback) {
@@ -58,7 +58,7 @@ SVGRender.prototype.load = function (svg, callback) {
      */
     this.finished = false;
     if (Blob.prototype.isPrototypeOf(svg) || File.prototype.isPrototypeOf(svg)) {
-//to be read with FileReader
+        //to be read with FileReader
         if (!svg.type || svg.type !== "image/svg+xml") {
             throw "Wrong file/blob type, should be image/svg+xml, is " + svg.type;
         }
@@ -117,12 +117,17 @@ SVGRender.prototype.load = function (svg, callback) {
         throw "Unknown svg type in svg-render!";
     }
 };
+
+
+var stream, recorder;
+
+
 /**
  * Start rendering
  * @param {Object} options - contains numbers FPS, time, imagesCount and function progressSignal
  * @param {function} callback
  * @returns {boolean} if the rendering was started
- * 
+ *
  * @public
  */
 SVGRender.prototype.render = function (options, callback) {
@@ -147,7 +152,7 @@ SVGRender.prototype.render = function (options, callback) {
 
     /**
      * Function to be called repeatedly when frame is rendered.
-     * has two parameters; count(total #frames) and doneCount(#frames rendered) 
+     * has two parameters; count(total #frames) and doneCount(#frames rendered)
      * @type {function}
      * @private
      */
@@ -226,15 +231,47 @@ SVGRender.prototype.render = function (options, callback) {
      */
     this.canvas = (options.canvas || document.createElement('canvas')); //default begin time
 
+    this.canvas.height = 500;
+    this.canvas.width = 500;
+
+    stream = this.canvas.captureStream();
+
+    recorder = new MediaRecorder(stream, {
+        mimeType: 'video/x-matroska',
+        audioBitsPerSecond: 1000000, // 1 Mbps
+        bitsPerSecond: 3000000      // 2 Mbps
+        // videoBitsPerSecond will also be 2 Mbps
+    });
+
+    recorder.ondataavailable = function(e) {
+        const allChunks = [];
+        allChunks.push(e.data);
+        const fullBlob = new Blob(allChunks);
+
+        // ... which we can download using HTML5 `download` attribute on <a />
+        const link = document.createElement('a');
+        link.style.display = 'none';
+
+        const downloadUrl = window.URL.createObjectURL(fullBlob);
+        link.href = downloadUrl;
+        link.download = 'media.mkv';
+
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    }
+
+    recorder.start();
+
     return true;
 };
 
 /**
- * Goes through DOM tree of given HTMLElement and removes specific tags 
+ * Goes through DOM tree of given HTMLElement and removes specific tags
  * @param {HTMLElement} htmlElement
  * @param {String[]} tags
  * @return {integer} - number of elements removed
- * 
+ *
  * @private
  */
 SVGRender.prototype.filterOut = function (htmlElement, tags, lvl) {
@@ -297,23 +334,24 @@ SVGRender.prototype.renderNextFrame = function () {
     this.svgImage.onload = function () {
 
         tmpCanvasx = this.canvas.getContext('2d');
-        this.canvas.width = this.svgImage.width;
-        this.canvas.height = this.svgImage.height;
-        tmpCanvasx.clearRect(0, 0, this.svgImage.width, this.svgImage.height);
+        if (this.canvas.width !== this.svgImage.width)
+            this.canvas.width = this.svgImage.width;
+        if (this.canvas.height !== this.svgImage.height)
+            this.canvas.height = this.svgImage.height;
         tmpCanvasx.drawImage(this.svgImage, 0, 0);
         //image now in tmpCanvas
 
-        //signalize progress 
+        //signalize progress
         if (this.progressSignal && typeof this.progressSignal === "function") {
             this.progressSignal(this.imagesDoneCount, this.imagesCount);
         }
 
         this.images[this.imagesDoneCount++] = this.canvas.toDataURL("image/png").replace(/^data:.+\/(.+);base64,/, "");
-        if (this.imagesDoneCount < this.imagesCount) {
+        if (this.imagesDoneCount <= this.imagesCount) {
             this.nextFrame = setTimeout(this.renderNextFrame.bind(this), 0);
         } else {
             this.finished = true;
-            this.callback(null, this.images);
+            recorder.stop();
         }
     }.bind(this);
 
@@ -415,9 +453,9 @@ SVGRender.prototype.importStyle = function (el, data) {
 
     for (var n = 0; n < data.value.length; n++) {
         el.style.setProperty(data.value[n].name,
-                data.value[n].value,
-                data.value[n].priority
-                );
+            data.value[n].value,
+            data.value[n].priority
+        );
     }
 };
 /**
@@ -458,7 +496,7 @@ SVGRender.prototype.isActive = function () {
 /**
  * Get last error message string
  * @public
- * @returns {String} 
+ * @returns {String}
  */
 SVGRender.prototype.getErrorMessage = function () {
     return this.errMessage;
